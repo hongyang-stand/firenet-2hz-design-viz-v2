@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>FireNet-2Hz: the design as it stands (Nov 2026)</title>
+<style>
+  :root {
+    --ink: #1f2328; --muted: #5b6470; --line: #d8dde3; --bg: #fbfbfa; --card: #ffffff;
+    --pred: #0f9d8a; --der: #2f6fed; --force: #c46a12; --stat: #8a929c; --fine: #d63384;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 10px; }
+  h2 { font-size: 22px; margin: 0 0 6px; }
+  h3 { font-size: 15px; margin: 16px 0 4px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  p { margin: 6px 0; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 840px; }
+  .answer { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--pred); padding: 14px 18px; margin: 18px 0 26px; border-radius: 6px; max-width: 900px; }
+  .answer ol { margin: 6px 0 0 18px; padding: 0; }
+  nav { position: sticky; top: 0; z-index: 5; background: rgba(251,251,250,.95); backdrop-filter: blur(4px); padding: 8px 0; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+  nav a { display: inline-block; margin: 3px 6px 3px 0; padding: 3px 10px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); text-decoration: none; font-size: 14px; background: #fff; }
+  nav a:hover { border-color: var(--ink); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 20px 22px; margin: 0 0 22px; scroll-margin-top: 60px; }
+  .row { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+  .figcol { flex: 0 0 500px; max-width: 100%; }
+  .txtcol { flex: 1 1 320px; min-width: 280px; }
+  svg { max-width: 100%; height: auto; display: block; }
+  svg text { font-family: inherit; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; margin-left: 6px; vertical-align: middle; }
+  .tag.open { background: #fff3e6; color: #8a4a0c; }
+  .tag.set { background: #dff5f1; color: #0b6b5e; }
+  .tag.new { background: #e8effe; color: #1d4fb8; }
+  .tag.drop { background: #f1f2f4; color: #5b6470; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; margin: 8px 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  ul, ol { margin: 4px 0 4px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.r-pred { background: #e3f5f2; } td.r-der { background: #e8effe; } td.r-stat { background: #f1f2f4; } td.r-none { color: var(--muted); }
+  td.r-bad { background: #fff3e6; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+  .chip { font-size: 13px; padding: 3px 10px; border-radius: 12px; border: 2px solid; background: #fff; }
+  .chip.pred { border-color: var(--pred); } .chip.der { border-color: var(--der); } .chip.drop { border-color: var(--line); color: var(--muted); text-decoration: line-through; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; }
+  .card b.n { display: inline-block; min-width: 1.6em; color: var(--muted); }
+  .card.bad { border-left: 4px solid var(--force); }
+  .card.good { border-left: 4px solid var(--pred); }
+  input[type=range] { width: 240px; vertical-align: middle; }
+  .eq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: #f6f7f8; border-radius: 6px; padding: 8px 12px; margin: 8px 0; }
+  code { font-size: 13px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 30px; }
+  .halo-pt { cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>FireNet-2Hz: the design as it stands, and why</h1>
+  <p class="lede">FireNet-2Hz is a neural network that learns to reproduce a production fire simulation (FDS) around a house, one 0.5 s step at a time. The <a href="https://hongyang-stand.github.io/firenet-2hz-design-viz/">29 October draft</a> described a plan. This page describes the model now in training: what it reads and predicts, how it is trained and scored, what was tried and dropped with the measured result, and what is still open. Items marked <span class="tag new">changed</span> differ from the draft. Items marked <span class="tag open">open</span> still need a decision.</p>
+
+  <div class="answer">
+    <b>Short version.</b>
+    <ol>
+      <li>The core is the same U-Net. Native FDS blocks use halo convolutions, 32 channels, 2 layers per side. The 4, 16 and 64 m levels are dense grids. The U-Net now runs in <b>bf16</b>; the carried state, the heads and the state update stay fp32.</li>
+      <li>Faces are trained on <b>FDS's own wall-cell values</b>, recovered by inverting FDS's corner rule. The face set now includes faces across mesh-block boundaries and the inert ground strip next to the house. With these, FDS's own values run through our FER path land within <b>1.6% of production FER</b> on all 9 test runs (the bar was 3%).</li>
+      <li>Training uses 216 runs with 2-step windows. From step 30k, half the windows are pushforward samples (up to 20 steps without gradient). The pushforward <b>HRR term made the model diverge twice</b>. Its weight is now 0 while a replacement is chosen.</li>
+      <li>On 4 H100s, <b>4 windows per GPU, balanced by size, with bf16 and a Triton CSR kernel</b>, the rate with pushforward went from 11.4 to 16.2 windows/s. The bottleneck is now the 66–81 s scene switch.</li>
+      <li>The draft's wind rotation, built-in PMMA burning curve, 1 → 20-step curriculum and one-scene milestone (M1) are not part of the current design.</li>
+    </ol>
+  </div>
+
+  <nav>
+    <a href="#step">One step</a>
+    <a href="#grid">The grid</a>
+    <a href="#outputs">What is predicted</a>
+    <a href="#faces">Faces</a>
+    <a href="#time">Forcing and time</a>
+    <a href="#loss">Loss</a>
+    <a href="#pf">Pushforward</a>
+    <a href="#cons">Conservation</a>
+    <a href="#eval">Data and scoring</a>
+    <a href="#speed">Training throughput</a>
+    <a href="#changes">Changes since 29 Oct</a>
+    <a href="#open">Open questions</a>
+  </nav>
+
+  <!-- ============ ONE STEP ============ -->
+  <section id="step">
+    <h2>One step: state at t → state at t + 0.5 s</h2>
+    <p>Each input is one of three things: fixed geometry, forcing from the scenario file, or something the model produced one step earlier. Anything else would be unavailable during a rollout.</p>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--pred)"></i>predicted and fed back</span>
+      <span><i class="sw" style="background:var(--der)"></i>derived from predictions</span>
+      <span><i class="sw" style="background:var(--force)"></i>forcing from the scenario</span>
+      <span><i class="sw" style="background:var(--stat)"></i>static geometry and materials</span>
+    </div>
+    <svg viewBox="0 0 1060 450" role="img" aria-label="Pipeline: state, static and forcing inputs feed a U-Net with halo-conv native levels and dense 4, 16 and 64 m levels, run in bf16; a gas head and a face head produce the next state in fp32, which is fed back.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b6470"/></marker>
+        <marker id="arp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0f9d8a"/></marker>
+      </defs>
+      <g font-size="12.5" fill="#1f2328">
+        <rect x="10" y="40" width="250" height="118" rx="8" fill="#fff" stroke="#0f9d8a" stroke-width="2"/>
+        <text x="22" y="62" font-weight="700">State at t (fp32)</text>
+        <text x="22" y="84">Gas corners: T, U, V, W, Z, G, HRRPUV</text>
+        <text x="22" y="104">Faces: wall T, q_conv, q_inc, burning</text>
+        <text x="22" y="122">rate; fuel mass; memory (ignited,</text>
+        <text x="22" y="140">∫q_inc since ignition, dose)</text>
+
+        <rect x="10" y="172" width="250" height="118" rx="8" fill="#fff" stroke="#8a929c" stroke-width="2"/>
+        <text x="22" y="194" font-weight="700">Static</text>
+        <text x="22" y="214">Gas: log₂ cell size, gas fraction φ,</text>
+        <text x="22" y="232">height above ground, wall area/volume,</text>
+        <text x="22" y="250">open-boundary flag</text>
+        <text x="22" y="268">Faces: normal, area, type, ε, fuel props</text>
+        <text x="22" y="284" fill="#5b6470">(never IDs; vegetation channels 0)</text>
+
+        <rect x="10" y="304" width="250" height="128" rx="8" fill="#fff" stroke="#c46a12" stroke-width="2"/>
+        <text x="22" y="326" font-weight="700">Forcing at t + Δt</text>
+        <text x="22" y="348">Fireline: density × deck ramp</text>
+        <text x="22" y="366">Ignitor area density (696 °C spheres)</text>
+        <text x="22" y="384">Wind u, v from the deck's ramps</text>
+        <text x="22" y="402">Actual Δt / 0.5 s</text>
+        <text x="22" y="422" fill="#5b6470">No absolute time</text>
+
+        <path d="M262,100 L300,100" stroke="#5b6470" stroke-width="1.6" marker-end="url(#ar)"/>
+        <path d="M262,230 L282,230 L282,104" stroke="#5b6470" stroke-width="1.6" fill="none"/>
+        <path d="M262,368 L282,368 L282,230" stroke="#5b6470" stroke-width="1.6" fill="none"/>
+
+        <rect x="296" y="40" width="414" height="370" rx="10" fill="none" stroke="#2f6fed" stroke-dasharray="6 4"/>
+        <text x="503" y="30" text-anchor="middle" font-weight="700">U-Net in bf16 (LayerNorm in fp32), 3×3×3 convs, residual, GELU</text>
+        <rect x="302" y="78" width="130" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="367" y="96" text-anchor="middle" font-weight="600">native · halo conv</text>
+        <text x="367" y="113" text-anchor="middle">32 ch · 2 layers</text>
+        <rect x="568" y="78" width="130" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="633" y="96" text-anchor="middle" font-weight="600">native · halo conv</text>
+        <text x="633" y="113" text-anchor="middle">32 ch · 2 layers</text>
+
+        <rect x="332" y="168" width="120" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="392" y="186" text-anchor="middle" font-weight="600">4 m · dense</text>
+        <text x="392" y="203" text-anchor="middle">128 ch · 4 layers</text>
+        <rect x="548" y="168" width="120" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="608" y="186" text-anchor="middle" font-weight="600">4 m · dense</text>
+        <text x="608" y="203" text-anchor="middle">128 ch · 4 layers</text>
+
+        <rect x="362" y="258" width="110" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="417" y="276" text-anchor="middle" font-weight="600">16 m · dense</text>
+        <text x="417" y="293" text-anchor="middle">256 ch · 2 layers</text>
+        <rect x="528" y="258" width="110" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="583" y="276" text-anchor="middle" font-weight="600">16 m · dense</text>
+        <text x="583" y="293" text-anchor="middle">256 ch · 2 layers</text>
+
+        <rect x="440" y="348" width="120" height="44" rx="6" fill="#f6f7f8" stroke="#1f2328"/>
+        <text x="500" y="366" text-anchor="middle" font-weight="600">64 m · dense</text>
+        <text x="500" y="383" text-anchor="middle">256 ch · 2 layers</text>
+
+        <g stroke="#5b6470" stroke-width="1.6" fill="none">
+          <path d="M367,122 L380,166" marker-end="url(#ar)"/>
+          <path d="M392,212 L405,256" marker-end="url(#ar)"/>
+          <path d="M417,302 L452,346" marker-end="url(#ar)"/>
+          <path d="M548,346 L583,304" marker-end="url(#ar)"/>
+          <path d="M595,256 L608,214" marker-end="url(#ar)"/>
+          <path d="M620,166 L633,124" marker-end="url(#ar)"/>
+        </g>
+        <g stroke="#8a929c" stroke-width="1.4" stroke-dasharray="5 4" fill="none">
+          <path d="M432,100 L566,100" marker-end="url(#ar)"/>
+          <path d="M452,190 L546,190" marker-end="url(#ar)"/>
+          <path d="M472,280 L526,280" marker-end="url(#ar)"/>
+        </g>
+        <text x="345" y="150" fill="#5b6470" font-size="11.5" text-anchor="end">pool: φV-</text>
+        <text x="345" y="164" fill="#5b6470" font-size="11.5" text-anchor="end">weighted mean</text>
+        <text x="652" y="150" fill="#5b6470" font-size="11.5">unpool: copy</text>
+        <text x="499" y="94" fill="#5b6470" font-size="11.5" text-anchor="middle">skip</text>
+
+        <rect x="740" y="40" width="300" height="118" rx="8" fill="#fff" stroke="#0f9d8a" stroke-width="2"/>
+        <text x="752" y="62" font-weight="700">Gas head (fp32) → gas at t + Δt</text>
+        <text x="752" y="84">Change (Δ): T, U, V, W, Z</text>
+        <text x="752" y="104">Absolute: G, HRRPUV</text>
+        <text x="752" y="124">Floors: T ≥ min, Z, HRRPUV ≥ 0</text>
+        <text x="752" y="144" fill="#5b6470">Zero-initialised: starts as "no change"</text>
+
+        <rect x="740" y="180" width="300" height="168" rx="8" fill="#fff" stroke="#0f9d8a" stroke-width="2"/>
+        <text x="752" y="202" font-weight="700">Face head (MLP, one per face, fp32)</text>
+        <text x="752" y="222">8 gas corners + 4 m and 16 m features</text>
+        <text x="752" y="240">→ wall T, q_conv, q_inc, burning rate</text>
+        <text x="752" y="260">PMMA burns only once wall T ≥ 371 °C</text>
+        <rect x="748" y="270" width="284" height="70" rx="5" fill="#e8effe" stroke="none"/>
+        <text x="756" y="289">Derived: radiative and net flux (FER),</text>
+        <text x="756" y="307">fuel mass (never increases),</text>
+        <text x="756" y="325">ignited flag, ∫q_inc, dose</text>
+
+        <path d="M698,100 L738,100" stroke="#5b6470" stroke-width="1.6" marker-end="url(#ar)"/>
+        <path d="M698,108 L718,108 L718,250 L738,250" stroke="#5b6470" stroke-width="1.6" fill="none" marker-end="url(#ar)"/>
+        <path d="M668,198 L718,198" stroke="#5b6470" stroke-width="1.6" fill="none"/>
+        <path d="M638,288 L718,288 L718,250" stroke="#5b6470" stroke-width="1.6" fill="none"/>
+
+        <path d="M1040,100 L1052,100 L1052,12 L135,12 L135,38" stroke="#0f9d8a" stroke-width="2" fill="none" marker-end="url(#arp)"/>
+        <path d="M1040,265 L1052,265 L1052,100" stroke="#0f9d8a" stroke-width="2" fill="none"/>
+        <rect x="520" y="3" width="200" height="18" fill="#fff"/>
+        <text x="620" y="16" fill="#0b6b5e" font-size="12" text-anchor="middle" font-weight="600">fed back as the next state</text>
+      </g>
+    </svg>
+    <p class="hint">The level depths follow measured transport. Hot gas moves 3–7 m per 0.5 s step at the median and 6–25 m at the 99th percentile, so one step can cross many native cells. Native blocks keep FDS's cell sizes. The coarse levels are plain dense grids anchored on 4 m cells, so they run as ordinary cuDNN convolutions.</p>
+    <p><b>Why bf16 only inside the U-Net</b> <span class="tag new">changed</span>. The draft fixed fp32 (TF32) everywhere. A scale check on 40 runs found that bf16's range is fine for every field. Its precision is fine inside the network, but not for the carried state or the running sums. Running the state in bf16 too was tested: fuel mass drifted −0.16% on every run, and FER got worse on 14 of 20 runs. So only the U-Net's activations are bf16. See <a href="#speed">throughput</a>.</p>
+  </section>
+
+  <!-- ============ GRID ============ -->
+  <section id="grid">
+    <h2>The grid: FDS's blocks, corner values, and a one-cell halo</h2>
+    <div class="row">
+      <div class="figcol">
+        <svg id="gridfig" viewBox="0 0 500 370" role="img" aria-label="A 1 m block with a finer block on its left, a coarser block on its right, a same-size block above, and the domain edge below. Halo corners are coloured by how they are filled."></svg>
+        <div class="legend">
+          <span><i class="sw" style="background:#1f2328"></i>this block's corners</span>
+          <span><i class="sw" style="background:var(--pred)"></i>halo: same size (copy)</span>
+          <span><i class="sw" style="background:var(--fine)"></i>halo: average (finer)</span>
+          <span><i class="sw" style="background:var(--der)"></i>halo: interpolate (coarser)</span>
+          <span><i class="sw" style="background:var(--stat)"></i>halo: outside the domain</span>
+        </div>
+        <p class="hint">Click or hover a coloured halo corner to see which neighbour values fill it.</p>
+      </div>
+      <div class="txtcol">
+        <p>FDS splits space into blocks of cubic cells, with small cells near the house. Production output stores <b>corner values</b>, so the model works on corners. A 16³-cell block is a 17³ corner grid, which the halo pads to 19³.</p>
+        <p>Inside a block every cell has the same size, so the 3×3×3 kernel runs as usual. Before each native layer, each block's halo is filled from its neighbours, converted to this block's spacing:</p>
+        <ul>
+          <li><b>Same size or coarser neighbour:</b> trilinear interpolation in the neighbour. Where the points line up, this is an exact copy.</li>
+          <li><b>Finer neighbour:</b> φV-weighted average of the fine corners inside this corner's box.</li>
+          <li><b>Outside the domain:</b> the first layer gets free-stream values (ambient gas, the wind, and the nearest corner's statics). Deeper layers get a learned fill, one for open sides and one for the ground.</li>
+        </ul>
+        <p><b>How it runs</b> <span class="tag new">changed</span>. The halo and the interior gather are one sparse matrix product per layer, <code>P = A x</code>, whose backward is <code>Aᵀ g</code>. This avoids the atomics and the slow sort-based scatter that the first code spent much of its time in. Short-row products go through a small Triton kernel.</p>
+        <p id="gridinfo" class="card" style="min-height:3.2em">Pick a halo corner.</p>
+        <p class="hint">Alternatives (OctNet, mixed depth, graphs) are compared in <a href="https://hongyang-stand.github.io/mixed-res-conv-viz/">convolution on cells of different sizes</a>. Mixed depth is a separate follow-up (SCI-6238). Refreshing the halo only every second layer was tested and dropped: it was ×1.12–1.18 slower and changed the output by 10%.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OUTPUTS ============ -->
+  <section id="outputs">
+    <h2>What is predicted, derived, or dropped</h2>
+    <div class="row">
+      <div class="txtcol">
+        <h3>Gas (on every corner)</h3>
+        <div class="chips">
+          <span class="chip pred">TEMPERATURE · Δ</span><span class="chip pred">U, V, W · Δ</span><span class="chip pred">MIXTURE FRACTION · Δ</span>
+          <span class="chip pred">INTEGRATED INTENSITY (G) · absolute</span><span class="chip pred">HRRPUV · absolute</span>
+          <span class="chip der">DENSITY from T (ideal gas)</span>
+          <span class="chip drop">PRESSURE</span><span class="chip drop">RADIATION EMISSION</span>
+        </div>
+        <p><b>Δ vs absolute.</b> Slow, transported fields are predicted as a change. Fast or on/off fields (heat release, radiation, fluxes, burning rate) are predicted outright.</p>
+        <p><b>Units.</b> Each field is put through asinh or log before the network sees it, for example <code>asinh((T − 20 °C)/50 K)</code> and <code>asinh(HRRPUV / 100 kW/m³)</code>. Each output is in units of that field's spread on the training runs.</p>
+        <p><b>Dropped.</b> Pressure is a low-Mach diagnostic. Radiation emission is mostly a function of T, and G carries the radiation target. The draft listed this as open; it is now settled.</p>
+        <p><b>Floors, no ceilings.</b> Straight-through clamps keep T, Z, HRRPUV, q_inc and burning rate physical while still passing gradient. G is positive by construction through the log.</p>
+      </div>
+      <div class="figcol">
+        <h3>Where the combustion heat comes from</h3>
+        <svg viewBox="0 0 500 170" role="img" aria-label="Median share of combustion heat over 280 production runs: ground fuel 77%, PMMA buildings 23%, vegetation particles 0.16%.">
+          <g font-size="13" fill="#1f2328">
+            <line x1="170" y1="16" x2="170" y2="138" stroke="#d8dde3"/>
+            <g><title>Ground surface fuel (grass, pine needles): median 77%</title>
+              <rect x="170" y="20" width="246" height="26" fill="#0f9d8a"/>
+              <text x="162" y="38" text-anchor="end">Ground surface fuel</text><text x="424" y="38" font-weight="600">77%</text></g>
+            <g><title>PMMA buildings: median 23%</title>
+              <rect x="170" y="62" width="74" height="26" fill="#0f9d8a"/>
+              <text x="162" y="80" text-anchor="end">PMMA buildings</text><text x="252" y="80" font-weight="600">23%</text></g>
+            <g><title>Vegetation particles: median 0.16%</title>
+              <rect x="170" y="104" width="2" height="26" fill="#0f9d8a"/>
+              <text x="162" y="122" text-anchor="end">Vegetation particles</text><text x="180" y="122" font-weight="600">0.16%</text></g>
+            <text x="170" y="160" fill="#5b6470" font-size="12">Median share per run, 280 production runs</text>
+          </g>
+        </svg>
+        <p>Vegetation particles carry almost no heat, so they are skipped. The model predicts the two real fuels, the ground surface fuel and the PMMA faces. The target is production FDS as it runs, so the model does not correct the near-massless trees. Fireline and ignitors are prescribed by the scenario and enter as forcing.</p>
+      </div>
+    </div>
+
+    <h3>Faces <span class="tag new">changed</span></h3>
+    <table>
+      <tr><th>Field</th><th>Main house (inert)</th><th>Ground strip ≤ 2 m from the house (inert) <span class="tag new">new</span></th><th>PMMA buildings</th><th>Ground fuel</th></tr>
+      <tr><td>Wall temperature</td><td class="r-stat">held at ambient</td><td class="r-stat">held at ambient</td><td class="r-pred">predicted Δ · weight 1</td><td class="r-pred">predicted Δ · weight 1</td></tr>
+      <tr><td>Convective heat flux</td><td class="r-pred">predicted · 0.5</td><td class="r-pred">predicted · 0.5</td><td class="r-pred">predicted · 0 (via net)</td><td class="r-pred">predicted · 0.25</td></tr>
+      <tr><td>Incident heat flux</td><td class="r-pred">predicted · 0.5</td><td class="r-pred">predicted · 0.5</td><td class="r-pred">predicted · 0 (via net)</td><td class="r-pred">predicted · 0.25</td></tr>
+      <tr><td>Radiative heat flux</td><td class="r-der">derived</td><td class="r-der">derived</td><td class="r-der">derived</td><td class="r-der">derived</td></tr>
+      <tr><td>Total (net) heat flux</td><td class="r-der"><b>derived · 1: the FER quantity</b></td><td class="r-der">derived · 1</td><td class="r-der">derived · 1</td><td class="r-der">derived · 0.25</td></tr>
+      <tr><td>Burning rate</td><td class="r-none">–</td><td class="r-none">–</td><td class="r-pred">predicted ≥ 0 · 1, gated by ignition</td><td class="r-pred">predicted ≥ 0 · 1</td></tr>
+      <tr><td>Fuel mass</td><td class="r-none">–</td><td class="r-none">–</td><td class="r-der">integrated, never limits the burn</td><td class="r-der">integrated, never increases · 1</td></tr>
+    </table>
+    <p class="hint">The numbers after each dot are the per-channel weights in the face loss. Teal: predicted and fed back. Blue: derived from predictions. Gray: fixed. Targets are FDS's native per-face wall-cell values (see <a href="#eval">scoring</a>), no longer the mean of a face's 4 stored corners.</p>
+    <ul>
+      <li><b>Why the ground strip.</b> Production's FER point set includes the ground cells inside the main-building footprint. Those hold 0.2–17.8% of production FER on the 9 test runs, and they sit within 1.2 m of a house face. Inert ground within 2 m (in plan) of a house face is now a model face, held at ambient like the house.</li>
+      <li><b>Why PMMA mass never limits the burn.</b> FDS burns PMMA by its heat-release ramp, with no burn-away. One run burns 11.2 kg/m² against a density × thickness of 7.7. So the model's PMMA mass starts at a value it cannot exhaust, as FDS's does. A deck with burn-away fails loudly instead.</li>
+      <li><b>Emissivity.</b> House, inert ground and PMMA use 0.9, as FDS does, so the derived net flux equals FDS's TOTAL HEAT FLUX on the house (max error 1.5·10⁻⁴ kW/m²). Ground fuel keeps 1.0 for now; its FDS fluxes imply 0.44–0.56. <span class="tag open">open</span></li>
+    </ul>
+  </section>
+
+  <!-- ============ FACES ============ -->
+  <section id="faces">
+    <h2>Faces: a list with a per-face head <span class="tag set">settled</span></h2>
+    <div class="row">
+      <div class="figcol">
+        <svg viewBox="0 0 500 300" role="img" aria-label="A wall face gathers the corners of its adjacent gas cell and coarse decoder features, runs a small MLP to four outputs, and scatters wall temperature and fuel release back to those corners.">
+          <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6470"/></marker></defs>
+          <g font-size="12.5" fill="#1f2328">
+            <rect x="40" y="40" width="140" height="140" fill="#f6f7f8" stroke="#1f2328"/>
+            <text x="110" y="30" text-anchor="middle" font-weight="600">gas cell next to the face</text>
+            <g fill="#1f2328"><circle cx="40" cy="40" r="6"/><circle cx="180" cy="40" r="6"/><circle cx="40" cy="180" r="6"/><circle cx="180" cy="180" r="6"/></g>
+            <rect x="30" y="182" width="160" height="22" fill="#c46a12" opacity=".25"/>
+            <line x1="30" y1="182" x2="190" y2="182" stroke="#c46a12" stroke-width="5"/>
+            <text x="110" y="222" text-anchor="middle">wall face (house, ground</text><text x="110" y="238" text-anchor="middle">strip, PMMA or ground fuel)</text>
+            <text x="110" y="256" text-anchor="middle" fill="#5b6470">2D sketch: 8 corners in 3D</text>
+            <path d="M190,80 C240,80 250,110 288,112" stroke="#5b6470" stroke-width="1.6" fill="none" marker-end="url(#ar2)"/>
+            <text x="244" y="72" text-anchor="middle" fill="#5b6470">gather</text>
+            <text x="248" y="58" text-anchor="middle" fill="#5b6470" font-size="11.5">+ 4 m, 16 m features</text>
+            <rect x="292" y="80" width="190" height="104" rx="8" fill="#fff" stroke="#0f9d8a" stroke-width="2"/>
+            <text x="387" y="100" text-anchor="middle" font-weight="700">2-layer MLP, 128 wide</text>
+            <text x="304" y="122">wall T</text><text x="390" y="122">convective flux</text>
+            <text x="304" y="142">burning rate</text><text x="390" y="142">incident flux</text>
+            <text x="387" y="170" text-anchor="middle" fill="#5b6470">+ face's own state and memory</text>
+            <path d="M330,186 C320,250 230,250 192,196" stroke="#0f9d8a" stroke-width="1.8" fill="none" marker-end="url(#ar2)"/>
+            <text x="330" y="262" text-anchor="middle" fill="#0b6b5e">scatter: area-mean wall T, fuel release</text>
+            <text x="330" y="280" text-anchor="middle" fill="#0b6b5e">per volume (wood vapour, MMA)</text>
+          </g>
+        </svg>
+      </div>
+      <div class="txtcol">
+        <p>FDS solves each wall cell as its own 1-D heat-conduction problem, coupled to its neighbours only through the gas. So the head is pointwise, with no face-to-face convolutions.</p>
+        <p>It reads the same decoder features that produce the gas at t + Δt, so the walls see the model's own next-step gas.</p>
+        <p><b>Fluxes use FDS's own identity</b>, so net flux always agrees with its parts:</p>
+        <div class="eq">q_rad = ε · (q_inc − σ T_w⁴)<br>q_net = q_conv + q_rad &nbsp;&nbsp;← FER<br>m ← max(m − Δt · ṁ″, 0)</div>
+        <p><b>PMMA burning: learned, behind a hard ignition gate</b> <span class="tag new">changed</span>. The draft leaned toward building in the scenario's burning curve. The code instead learns the burning rate from the face's features and memory. A PMMA face may burn only once its predicted wall temperature has reached 371 °C at this or an earlier step, and it then stays ignited. Ignition causality therefore holds by construction, and the curve does not have to be hard-coded per deck.</p>
+        <p><b>Faces across block boundaries</b> <span class="tag new">new</span>. A solid cell in one FDS mesh block next to a gas cell in the neighbouring block now makes a face, kept with its gas cell as FDS keeps it. On one run this added 2,905 faces, every one on a face centre FDS stores. Without them, house walls that start on a block boundary were missing.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TIME ============ -->
+  <section id="time">
+    <h2>Forcing and time: read forcing at the step being predicted</h2>
+    <div class="row">
+      <div class="figcol">
+        <svg viewBox="0 0 500 200" role="img" aria-label="Timeline: the model reads state at t and forcing at t plus delta t to predict the state at t plus delta t.">
+          <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5b6470"/></marker></defs>
+          <g font-size="12.5" fill="#1f2328">
+            <line x1="30" y1="120" x2="480" y2="120" stroke="#1f2328"/>
+            <g text-anchor="middle">
+              <line x1="80" y1="114" x2="80" y2="126" stroke="#1f2328"/><text x="80" y="144">t − Δt</text>
+              <line x1="240" y1="114" x2="240" y2="126" stroke="#1f2328"/><text x="240" y="144">t</text>
+              <line x1="400" y1="114" x2="400" y2="126" stroke="#1f2328"/><text x="400" y="144">t + Δt</text>
+            </g>
+            <rect x="200" y="56" width="80" height="34" rx="6" fill="#fff" stroke="#0f9d8a" stroke-width="2"/><text x="240" y="78" text-anchor="middle">state</text>
+            <rect x="350" y="56" width="100" height="34" rx="6" fill="#fff" stroke="#c46a12" stroke-width="2"/><text x="400" y="78" text-anchor="middle">forcing</text>
+            <rect x="330" y="150" width="140" height="34" rx="6" fill="#e3f5f2" stroke="#0f9d8a" stroke-width="2"/><text x="400" y="172" text-anchor="middle">predicted state</text>
+            <path d="M282,82 C320,120 340,140 360,152" stroke="#5b6470" stroke-width="1.6" fill="none" marker-end="url(#ar3)"/>
+            <path d="M430,92 L430,148" stroke="#5b6470" stroke-width="1.6" fill="none" marker-end="url(#ar3)"/>
+            <rect x="40" y="56" width="80" height="34" rx="6" fill="#fff" stroke="#8a929c" stroke-dasharray="4 3"/><text x="80" y="78" text-anchor="middle" fill="#5b6470">old forcing</text>
+            <line x1="40" y1="56" x2="120" y2="90" stroke="#8a929c"/>
+            <text x="80" y="36" text-anchor="middle" fill="#5b6470" font-size="11.5">earlier models: one step late</text>
+          </g>
+        </svg>
+      </div>
+      <div class="txtcol">
+        <p>Forcing (fireline, ignitors, wind, Δt) is read at the frame that ends the step. Earlier modular models read their boundary inputs one step late and needed a post-processing shift to fix it.</p>
+        <p>Δt is an input because FDS writes at the first step past each 0.5 s mark (for example 1.01 s).</p>
+        <p><b>No absolute time.</b> FDS is time-invariant given state and forcing. A clock input would invite shortcuts like "the structure burns at 60 s" that don't transfer to new scenes. The fireline channel is the deck's ramp times the fireline's density, which is forcing, not a clock. What FDS keeps but doesn't write lives in <b>face memory</b>: the ignited flag, incident energy since ignition, and cumulative net heat (the dose).</p>
+        <p><b>Wind rotation was not built</b> <span class="tag drop">not in the design</span>. The draft proposed turning each scene by one of the 8 grid symmetries so that the wind points within 0–45° of +x. The current code does not do this. Wind enters as u, v in the scene's own frame, from the deck's speed and direction ramps at every frame.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LOSS ============ -->
+  <section id="loss">
+    <h2>Loss: fire where FDS has fire, and no false fire</h2>
+    <p>Every term is divided by a running average of its own size, so the weights below are relative importances. Under data parallel, the running average uses the mean over ranks, so every GPU keeps the same scale and a resumed run restores it exactly.</p>
+    <div class="grid2">
+      <div>
+        <h3>Plain windows (H = 2 steps from an FDS state)</h3>
+        <svg viewBox="0 0 500 200" role="img" aria-label="Plain-window loss weights: gas 1, faces 1, house exceedance 0.5, 4 m and 16 m overlap 0.3 each, conservation ramps from 0 to 0.1 when switched on.">
+          <g font-size="12.5" fill="#1f2328" id="wshort"></g>
+        </svg>
+        <ul>
+          <li><b>Gas:</b> Huber per corner on T, U, V, W, Z and G, weighted by √(φV). Corners where either FDS <i>or</i> the model is hot (T &gt; ambient + 50 K) get extra weight, so the fire set carries about half the total (the boost is capped at 20×). Missing fire and false fire both cost. <b>HRRPUV has no per-corner term</b>: it is scored only through the totals.</li>
+          <li><b>Faces:</b> the same rule, with the channel weights in the <a href="#outputs">face table</a>.</li>
+          <li><b>Overlap (4 m, 16 m):</b> a soft Dice score on the hot fraction of each coarse cell. A plume one cell off then costs less than a missing plume.</li>
+          <li><b>House exceedance:</b> per-step cross-entropy on q_net &gt; 40 kW/m² for each house face, plus the error in soft time above 40 kW/m².</li>
+          <li><b>No asymmetric weights:</b> in an earlier model, a 3:1 asymmetry alone once caused a heat runaway.</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Pushforward windows (up to 20 steps without gradient, then H steps)</h3>
+        <svg viewBox="0 0 500 230" role="img" aria-label="Pushforward loss weights: dose 0.5, time above 40 kW per square metre 0.5, 16 m fields 0.5, flux quantiles 0.3, 16 m overlap 0.3, heat release 0.3 in the code but 0 in the current run.">
+          <g font-size="12.5" fill="#1f2328" id="wlong"></g>
+        </svg>
+        <ul>
+          <li>Past about 10 s, fine-scale gas decorrelates even between two FDS runs, so there are <b>no per-corner terms</b>. They would train toward a blurred plume.</li>
+          <li>Instead the loss scores house dose and time above 40 kW/m², house flux quantiles (0.5, 0.9, 0.95, 0.99), 16 m fields, and total heat release. Each term has a <b>dead zone</b> at FDS's own run-to-run spread: dose 2%, time above 2.3%, quantiles 5%, HRR 10%, and 16 m per-field floors.</li>
+          <li>The HRR term is at <b>weight 0</b> in the current run. See <a href="#pf">pushforward</a>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Schedule <span class="tag new">changed</span></h3>
+    <div class="row">
+      <div class="figcol">
+        <svg id="curfig" viewBox="0 0 500 230" role="img" aria-label="Window length H against optimizer steps: H equals 2 for 150 thousand steps with pushforward on half the windows from 30 thousand; then fork A at H 3 for 40 thousand steps and H 4 for 40 thousand."></svg>
+      </div>
+      <div class="txtcol">
+        <p>The draft planned a 1 → 20-step curriculum on one scene, then long rollouts up to 400 steps. That plan is replaced:</p>
+        <ul>
+          <li><b>H = 2 prefix</b> for 150k optimizer steps on 4 GPUs. Windows are 2 steps long and start anywhere in 0–200 s.</li>
+          <li><b>Pushforward from step 30k</b>, on half the windows: n ≤ 20 steps without gradient from an FDS state, then an H-step window with gradient. n is capped at 20 because pushforward rollouts vary in length, and on 4 GPUs every step waits for the longest one.</li>
+          <li><b>Fork A</b> continues the prefix at H = 3, then H = 4, for 40k steps each. Fork B (longer unrolls) and fork C (input noise instead of pushforward, the cheap baseline that pushforward must beat) are deferred to SCI-6250. Both fork from the saved H = 2 checkpoint.</li>
+          <li>Learning rate: linear warmup, then cosine decay to a floor. Gradients are clipped at norm 1. The learning rate is scaled down during pushforward. Steps with non-finite gradients are skipped; 100 skips mark the run as diverged.</li>
+          <li><b>Why short windows:</b> with no activation checkpointing, a 2-step window costs about 0.16 s and 4 GPUs see many scenes. The single-scene path keeps the old curriculum for overfit checks.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PUSHFORWARD ============ -->
+  <section id="pf">
+    <h2>Pushforward: it helps, but its heat-release term blew up twice</h2>
+    <p>Pushforward trains on states the model reached by itself, so it learns to correct its own drift. In the 4-GPU run it helped at first, and then one term took over the gradient. This is the sequence, with the measured results.</p>
+    <div class="grid2">
+      <div class="card good"><b class="n">1</b><b>Pushforward helps.</b> Step 30k (before pushforward) and step 50k (20k steps of it) were scored on the validation runs. At 30k, free rollouts run away: median model FER is 33 against FDS's 1.16. 50k is better on FER for 73 of 77 runs and overshoots heat release by ×2.5 instead of ×5.4.</div>
+      <div class="card bad"><b class="n">2</b><b>Gradient spikes.</b> The run crashed at about step 34.6k on a non-finite gradient. Before pushforward, the 95th-percentile gradient norm was under 100; after, it was 2.2k. Fix: skip non-finite steps and halve the learning rate during pushforward.</div>
+      <div class="card bad"><b class="n">3</b><b>The spikes tracked the HRR term</b> (rank correlation 0.52). Its fixed 10 kW floor let a dying fire's window turn a small leftover HRR into a relative error of 100–1000×. Fixes: floor at 1% of the run's peak HRR, and cap each pushforward term at 10× its running average. The HRR target also became the φV sum the model is scored with. The total FDS reports is 1.2–1.4× larger, so the term had been comparing unlike quantities.</div>
+      <div class="card bad"><b class="n">4</b><b>Still diverged.</b> Restarted from 50k with the fixed term, the run was much worse at the 60k evaluation. Median FER |log error| was 4.12 against 0.89 at 50k, worse on 68 of 77 runs, and free-rollout heat release fell to about 0.3% of FDS. A second restart with the learning rate ×0.25 diverged the same way: |log error| 3.10, better on only 9 of 77, and the fire dies.</div>
+      <div class="card"><b class="n">5</b><b>Diagnosis.</b> Gradients were measured per term on 4 checkpoints × 10 windows. The HRR term owns 94–99% of every pushforward update. Its gradient is nearly orthogonal to the plain-window gradient (cosine 0.00–0.27) and lands on the input layer and the coarse projections. HRR is a domain sum, so its gradient is coherent across the whole domain, and with clipping at 1 a pushforward step becomes a pure HRR step.</div>
+      <div class="card good"><b class="n">6</b><b>Current run: HRR weight 0</b>, restarted from 50k. With the term off, the pushforward gradient norm is 10–24 (plain windows 48–71), and its cosine with the plain gradient is +0.13 to +0.46. Through step 56.75k the gradient norm stayed low and the 16 m field term flat, with no sign of divergence. The 60k evaluation decides. <span class="tag open">open</span></div>
+    </div>
+    <p class="hint">Candidate replacements for the HRR term: a low weight, a per-term gradient cap or PCGrad, HRR scored locally per 16 m block instead of over the domain, or clipping. With the HRR term off, the flux-quantile term carries 60–70% of the pushforward gradient. Dose and time above 40 kW/m² contribute almost nothing, because they sit inside their dead zones.</p>
+  </section>
+
+  <!-- ============ CONSERVATION ============ -->
+  <section id="cons">
+    <h2>Conservation: a soft penalty with a dead zone</h2>
+    <div class="row">
+      <div class="figcol">
+        <svg id="hingefig" viewBox="0 0 500 260" role="img" aria-label="Penalty against relative error r: zero inside plus or minus tau, rising outside."></svg>
+        <p><label>Dead zone τ = <b id="tauv">0.10</b> <input id="tau" type="range" min="0" max="0.30" step="0.01" value="0.10"></label></p>
+        <p class="hint">The shape is the code's: Huber with δ = 1 applied to max(0, |r| − τ). Shown for |r| ≤ 0.5.</p>
+      </div>
+      <div class="txtcol">
+        <p>About 98% of the heat leaves through the open boundaries, so an exact energy budget can't close from 0.5 s snapshots. Instead the model's totals are compared with FDS's, on 16 m blocks and over the whole domain:</p>
+        <div class="eq">HRR = Σ φV · HRRPUV<br>E_s = Σ φV · ρ₀c_pT∞(1 − T∞/T)<br>M_Z = Σ φV · ρ(T) · Z<br>MLR = Σ ṁ″ · A &nbsp; per vapour (wood, MMA)</div>
+        <div class="eq">r = (pred − FDS) / (|FDS| + 0.01 · window peak + floor)<br>L = huber(max(0, |r| − τ))</div>
+        <ul>
+          <li>The penalty compares both the <b>level</b> of each total and its <b>change over the step</b>.</li>
+          <li>τ = 0 in plain windows: from a true state FDS is bit-repeatable, so any mismatch is error. In pushforward, τ is FDS's own spread: 0.24 for 16 m blocks and 0.10 for the domain.</li>
+          <li>Per-vapour fuel release is now a term, as the draft proposed. Each vapour has one source, so this match is exact.</li>
+          <li>The penalty is switched on by a flag. Once the gas term improves by less than 1% per 2k windows, its weight ramps 0 → 0.1 over 2k windows.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EVAL ============ -->
+  <section id="eval">
+    <h2>Data and scoring: FER computed the way production computes it</h2>
+    <p>At this stage the goal is to <b>match production's evaluation and physics exactly</b>, not to improve scores. The model predicts what FDS computes, on the same surfaces, and production's FER code runs on its output unchanged. The test: FDS's own values, put through our path, must reproduce production's number.</p>
+    <div class="row">
+      <div class="figcol">
+        <svg id="ferfig" viewBox="0 0 500 250" role="img" aria-label="Gap between FDS through our FER path and production FER on 9 test runs: before cross-block faces and the ground strip, 0.4 to 24 percent under; after, 0.0 to 1.6 percent, inside the 3 percent bar."></svg>
+        <p class="hint">FDS's own face values through our FER path, compared with production FER on the 9 test runs (range over runs). The dashed line is the agreed 3% bar.</p>
+      </div>
+      <div class="txtcol">
+        <h3>How FER is computed</h3>
+        <ul>
+          <li><b>Production's point set.</b> FER is the mean point FER over every boundary point of the cells that meet the main-building footprint. That set includes faces buried between two solid house voxels, which carry about 0 flux: 55–75% of the cells, so production FER is roughly half of the exterior-face FER. We keep that dilution instead of correcting it, so our numbers compare like with like. PLF = min(FER, 1.5) / 1.5.</li>
+          <li><b>FDS's corner rule, both ways.</b> FDS writes each boundary corner as the mean of the exposed wall cells around it. Prep inverts that rule to recover FDS's native per-face values, which become the training targets. The earlier target, the mean of a face's 4 corners, was a smoothed version: its 90th percentile was 5–17% off on hot faces. Corners rebuilt from the recovered values match the stored ones to ≤ 1.5·10⁻⁴. Eval then pushes the model's face values through the same rule. An alternative vertex-id rule was tested and was worse (−7 to −36%).</li>
+          <li><b>Closing the gap.</b> Adding the cross-block faces and the ground strip brought FDS through our path from 0.4–24% under production to within 0.0–1.6% on the 9 runs, and within 1.4% on 4 unseen runs.</li>
+        </ul>
+      </div>
+    </div>
+    <h3>Data and split <span class="tag new">changed</span></h3>
+    <p>The dataset holds 500 production runs as FDS wrote them, at 2 Hz in fp32, one object per frame. Prep succeeds on 494 of them. The draft's 5-fold plan is replaced: <b>train on the 216 prepped "extra" runs</b>, and split the scored 280 into <b>validation 80 / holdout 198</b> (seeded, stratified on burned). The sets share no scenario, house or group. Validation picks checkpoints; the holdout is read once, on the pick.</p>
+    <h3>What each checkpoint is scored on</h3>
+    <p>Every validation run is rolled out freely from frame 0 to 200 s, with no help from FDS. A person reads the table and picks the checkpoint; no single number decides.</p>
+    <div class="grid2">
+      <div class="card"><b class="n">1</b><b>House dose:</b> per face at the run's end, area-weighted mean |ln((pred + D₀)/(FDS + D₀))| with D₀ = 100 kJ/m². Tested on 9 runs: below D₀, faces that never matter for FER dominate; well above it, a lightly heated house scores about 0 whatever the prediction.</div>
+      <div class="card"><b class="n">2</b><b>FER and PLF</b> at the last FDS frame and at 200 s, pred − FDS, both through the same face → point rule, so a perfect model scores 0. The PLF error is reported separately, because FER error above the 1.5 cap does not change PLF.</div>
+      <div class="card"><b class="n">3</b><b>Short horizon:</b> from FDS states at 30, 60 and 100 s, the error after 5, 10 and 20 s on hot 4 m and 16 m cells, divided by the gap between two FDS reruns of the same deck. A ratio of 1 means as close as a rerun.</div>
+      <div class="card"><b class="n">4</b><b>Fixed budget</b> (the last checkpoint is flagged). Heat release integrated to 200 s is a diagnostic only. AUROC is read once, on the picked checkpoint, and is never used to rank.</div>
+    </div>
+  </section>
+
+  <!-- ============ SPEED ============ -->
+  <section id="speed">
+    <h2>Training throughput: bf16, Triton CSR and size-balanced batches <span class="tag new">new</span></h2>
+    <div class="row">
+      <div class="figcol">
+        <h3>4 × H100, windows per second</h3>
+        <svg id="tputfig" viewBox="0 0 500 250" role="img" aria-label="Windows per second on 4 H100s. Old recipe: 17.0 before pushforward, 11.4 with it. Slots 4 plus bf16 plus Triton: 19.6 and 16.2. With 8 loader workers: 23.9 and about 16."></svg>
+        <h3>1 × H100, ms per model step, median deck (fp32, 20-step window)</h3>
+        <svg id="benchfig" viewBox="0 0 500 220" role="img" aria-label="Single-GPU step time on the median deck: 320 ms first code, 275 with cudnn benchmark, 214 without sort-based scatter, 181 with fused LayerNorm, 111 round 2, 99 round 3, 77 round 4."></svg>
+      </div>
+      <div class="txtcol">
+        <h3>Adopted</h3>
+        <ul>
+          <li><b>bf16 U-Net</b>: ×1.44–1.56 faster per H = 2 window and ×1.2 per no-grad rollout step, measured on 20 validation runs. FER and field error match fp32 to within the noise of turning TF32 off.</li>
+          <li><b>Triton CSR kernel</b> for the short-row sparse products (halo, its transpose, unpool): exact; 3–5% faster per training window and 10% per no-grad step.</li>
+          <li><b>4 windows per GPU, balanced by size</b> (<code>--slots 4</code>), for an effective batch of 16 on 4 GPUs. Each scene visit draws 16 runs and sorts them by corner count into 4 size tiers. Each GPU gets one run per tier, and runs are swapped within tiers until the largest per-GPU total stops falling. Ranks then wait 0.1% of the time (4–6% before), with an imbalance of 1.006. The largest gradient norm fell from 42.9k to 2.1k, and no step was non-finite. Since rank waiting was small, most of the speed-up is bf16 and Triton.</li>
+        </ul>
+        <h3>Rejected, with the measurement</h3>
+        <ul>
+          <li><b>bf16 state</b>: fuel mass drifted −0.16% on every run; FER worse on 14 of 20 runs.</li>
+          <li><b>Pre-padded layout</b> (blocks stored with their halo): exact but ×1.38–1.54 slower. Convolutions, not gathers, dominate the native stack (weight gradient 28%, input gradient 17%, forward 10%, CSR halo 9%).</li>
+          <li><b>Halo every second layer</b>: ×1.12–1.18 slower, and the output differs by 10%.</li>
+          <li><b>Linearity splits</b> (first layer with statics precomputed; decoder without the concat): exact, but slower in eager mode.</li>
+          <li>Earlier (single GPU): convolution as 27 shifted matmuls (slower than cuDNN), a Triton gather-GEMM halo conv, selective activation checkpointing, and CUDA-graph capture of a window (−1.5%; the step was GPU-bound).</li>
+        </ul>
+      </div>
+    </div>
+    <h3>Where the time goes now</h3>
+    <div class="grid2">
+      <div class="card"><b>1 GPU, before pushforward: the loader.</b> A 4-window step kept the GPU busy only 39% of the time, because with 3 workers the gas-frame loader stalled 335 ms per step. With 8 workers the step went from 0.865 to 0.40 s (×2.2) and the GPU was 78% busy. The rest is kernel-launch overhead.</div>
+      <div class="card"><b>1 GPU, with pushforward: the GPU.</b> The step is GPU-bound, 80% busy.</div>
+      <div class="card"><b>4 GPUs, 8 workers.</b> +23% before pushforward (19.4 → 23.9 windows/s), no change with pushforward (about 16), +2% over the whole run.</div>
+      <div class="card bad"><b>4 GPUs: the scene switch.</b> Every 100 steps each GPU moves to new scenes, and a switch costs 66–81 s against about 9 s per 10 normal steps. Cause: the loss helpers recompile under torch.compile for each new scene (they are specialised on size despite <code>dynamic=True</code>), and cuDNN autotunes the new shapes. On 1 GPU a switch costs about 10 s; why 4 GPUs are so much worse is not yet known. Next fix: stop the per-scene recompiles. <span class="tag open">open</span></div>
+    </div>
+    <p class="hint"><b>Memory.</b> The draft estimated a fully checkpointed fp32 20-step window at about 19 / 37 GiB on the median / largest scene. Measured peaks were 12.9 / 25.2 GiB, so it fits one H100 as claimed. Step time was the problem: the first code ran 4× over its estimate. Training now uses H = 2 windows with no activation checkpointing.</p>
+  </section>
+
+  <!-- ============ CHANGES ============ -->
+  <section id="changes">
+    <h2>What changed since the 29 October draft</h2>
+    <table>
+      <tr><th>Draft (29 Oct)</th><th>Now</th><th>Why, with the evidence</th></tr>
+      <tr><td>fp32 (TF32) throughout</td><td class="r-pred">bf16 U-Net; fp32 state, heads, update</td><td>×1.44–1.56 per window at matching FER; a bf16 state drifted fuel mass −0.16%</td></tr>
+      <tr><td>Face targets from the boundary output</td><td class="r-pred">FDS's native wall-cell values (corner rule inverted)</td><td>4-corner means were 5–17% off (p90) on hot faces</td></tr>
+      <tr><td>House, PMMA, ground-fuel faces</td><td class="r-pred">+ cross-block faces, + inert ground ≤ 2 m from the house</td><td>FDS through our path: 0.4–24% under production → within 1.6%</td></tr>
+      <tr><td>FER on house faces</td><td class="r-pred">FER on production's point set, buried faces included</td><td>Same number as production; buried faces halve FER</td></tr>
+      <tr><td>PMMA burning built in (leaning)</td><td class="r-pred">learned, behind a hard 371 °C ignition gate</td><td>Causality by construction; no per-deck curve</td></tr>
+      <tr><td>PMMA fuel mass integrated</td><td class="r-pred">never limits the burn</td><td>FDS burns PMMA by ramp, with no burn-away (11.2 vs 7.7 kg/m² on one run)</td></tr>
+      <tr><td>Wind snapped to 0–45° by grid symmetries</td><td class="r-bad">not built</td><td>Wind enters as u, v in the scene frame</td></tr>
+      <tr><td>Curriculum K = 1 → 20 on one scene, then rollouts to 400 steps</td><td class="r-pred">216 runs, H = 2 prefix, pushforward n ≤ 20 from 30k, fork A at H = 3, 4</td><td>Cheap short windows across many scenes; long n makes the GPUs wait on each other</td></tr>
+      <tr><td>Pushforward HRR term, weight 0.3</td><td class="r-bad">weight 0 in the current run</td><td>Owned 94–99% of pushforward updates; two diverged restarts</td></tr>
+      <tr><td>M1: overfit one scene first</td><td class="r-stat">dropped as a milestone; kept as a smoke check</td><td>Went straight to multi-run training (one-scene face loss 2.09 → 0.29 in the smoke test)</td></tr>
+      <tr><td>5-fold split</td><td class="r-pred">train 216 / val 80 / holdout 198</td><td>More held-out runs from one training run</td></tr>
+      <tr><td>Open: fuel release per vapour; drop pressure and emission; faces as a list</td><td class="r-pred">all settled as proposed</td><td>In the code</td></tr>
+    </table>
+  </section>
+
+  <!-- ============ OPEN ============ -->
+  <section id="open">
+    <h2>Open questions</h2>
+    <table>
+      <tr><th>#</th><th>Question</th><th>Where it stands</th></tr>
+      <tr><td class="num">1</td><td>What replaces the pushforward HRR term: a low weight, a per-term gradient cap or PCGrad, local per-16 m HRR, or clipping?</td><td>HRR at weight 0 in the current run; the 60k evaluation is pending</td></tr>
+      <tr><td class="num">2</td><td>Stop the per-scene recompiles at a scene switch; find out why 4 GPUs pay 66–81 s against about 10 s on one GPU.</td><td>Next speed fix</td></tr>
+      <tr><td class="num">3</td><td>Sign-off on the faster recipe for fork A and SCI-6250: 4 slots, bf16, Triton, scene visits of 100 steps, learning rate scaled for batch 16.</td><td>Proposed</td></tr>
+      <tr><td class="num">4</td><td>Fork B (longer unroll) and fork C (input noise instead of pushforward).</td><td>Deferred to SCI-6250</td></tr>
+      <tr><td class="num">5</td><td>Ground-fuel emissivity: 1.0 now; FDS fluxes imply 0.44–0.56.</td><td>Fix if ground-fuel net flux matters</td></tr>
+      <tr><td class="num">6</td><td>Vegetation static channels are zeros (particles skipped; production trees are near massless).</td><td>Fill if production decks change</td></tr>
+      <tr><td class="num">7</td><td>Wind rotation by grid symmetries.</td><td>Not built; revisit if wind direction fails to generalise</td></tr>
+      <tr><td class="num">8</td><td>Mixed-time-step training (0.5, 1, 2 s).</td><td>Follow-up, SCI-6262</td></tr>
+    </table>
+  </section>
+
+  <footer>Design as of 2 Nov 2026 (SCI-6207; training SCI-6243; speed SCI-6261). The numbers are measurements from the code, its benchmarks, and the training and evaluation runs, unless marked as estimates. Draft of 29 Oct: <a href="https://hongyang-stand.github.io/firenet-2hz-design-viz/">previous page</a>.</footer>
+</main>
+
+<script>
+(() => {
+const NS = 'http://www.w3.org/2000/svg';
+const C = { ink: '#1f2328', muted: '#5b6470', line: '#d8dde3', pred: '#0f9d8a', der: '#2f6fed', force: '#c46a12', stat: '#8a929c', fine: '#d63384' };
+const el = (tag, attrs, parent, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; if (parent) parent.appendChild(e); return e; };
+
+/* ---------- grid / halo ---------- */
+{
+  const svg = document.getElementById('gridfig'), info = document.getElementById('gridinfo');
+  const S = 26, X0 = 4.6, Y0 = 11.2;
+  const px = x => (x + X0) * S, py = y => (Y0 - y) * S;
+  const g = el('g', {}, svg);
+  el('rect', { x: px(-4.4), y: py(0), width: (4.4 + 12.4) * S, height: 2.6 * S, fill: '#eef0f2' }, g);
+  el('text', { x: px(4), y: py(-1.85), 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, g, 'outside the domain');
+  const lines = (x0, x1, y0, y1, h, color, w) => {
+    for (let x = x0; x <= x1 + 1e-9; x += h) el('line', { x1: px(x), y1: py(y0), x2: px(x), y2: py(y1), stroke: color, 'stroke-width': w }, g);
+    for (let y = y0; y <= y1 + 1e-9; y += h) el('line', { x1: px(x0), y1: py(y), x2: px(x1), y2: py(y), stroke: color, 'stroke-width': w }, g);
+  };
+  lines(-4, 0, 0, 8, 0.5, '#ecd2df', 1);
+  lines(8, 12, 0, 8, 2, '#cfdcfb', 1.2);
+  lines(0, 8, 8, 10.5 - 0.5, 1, '#cfe9e4', 1);
+  lines(0, 8, 0, 8, 1, '#c9ced4', 1);
+  el('rect', { x: px(0), y: py(8), width: 8 * S, height: 8 * S, fill: 'none', stroke: C.ink, 'stroke-width': 2 }, g);
+  const lab = (x, y, t, c) => el('text', { x: px(x), y: py(y), 'text-anchor': 'middle', 'font-size': 12, fill: c, 'font-weight': 600 }, g, t);
+  lab(-2, 10.3, '0.5 m cells', C.fine); lab(10, 10.3, '2 m cells', C.der); lab(4, 10.75, '1 m cells', C.pred);
+  for (let i = 0; i <= 8; i++) for (let j = 0; j <= 8; j++) el('circle', { cx: px(i), cy: py(j), r: 2.4, fill: C.ink }, g);
+  const src = el('g', {}, svg);
+  const halo = [];
+  for (let j = 0; j <= 8; j++) { halo.push({ x: -1, y: j, kind: 'fine' }); halo.push({ x: 9, y: j, kind: 'coarse' }); }
+  for (let i = 0; i <= 8; i++) { halo.push({ x: i, y: 9, kind: 'same' }); halo.push({ x: i, y: -1, kind: 'out' }); }
+  const color = { fine: C.fine, coarse: C.der, same: C.pred, out: C.stat };
+  const sources = h => {
+    if (h.kind === 'same') return [[h.x, 9]];
+    if (h.kind === 'out') return [];
+    if (h.kind === 'fine') { const r = []; for (let x = -1.5; x <= -0.5; x += 0.5) for (let y = h.y - 0.5; y <= h.y + 0.5 + 1e-9; y += 0.5) if (y >= 0 && y <= 8) r.push([x, y]); return r; }
+    const ya = Math.floor(h.y / 2) * 2, yb = Math.min(ya + 2, 8);
+    return [...new Set([ya, yb])].flatMap(y => [[8, y], [10, y]]);
+  };
+  const text = h => ({
+    same: `Same-size neighbour above: trilinear interpolation lands exactly on its corner at (${h.x}, 9), so this is a <b>copy</b>.`,
+    out: 'Outside the domain (ground here): in layer 1, <b>free-stream</b> values (ambient gas, the wind, the nearest corner\'s statics and forcing); deeper layers get a <b>learned fill</b>, one for open sides and one for the ground.',
+    fine: `Finer neighbour: <b>φV-weighted average</b> of the ${sources(h).length} fine corners inside this corner's 1 m box.`,
+    coarse: `Coarser neighbour: <b>interpolate</b> from ${sources(h).length} coarse corners.` + (h.y % 2 ? '' : ' Here a coarse corner lines up, so it equals a copy along this row.'),
+  })[h.kind];
+  const pick = h => {
+    src.innerHTML = '';
+    for (const [x, y] of sources(h)) el('circle', { cx: px(x), cy: py(y), r: 6, fill: 'none', stroke: color[h.kind], 'stroke-width': 2.5 }, src);
+    el('circle', { cx: px(h.x), cy: py(h.y), r: 8, fill: 'none', stroke: C.ink, 'stroke-width': 2 }, src);
+    info.innerHTML = text(h);
+  };
+  for (const h of halo) {
+    const c = el('circle', { cx: px(h.x), cy: py(h.y), r: 5, fill: color[h.kind], stroke: '#fff', 'stroke-width': 1.5, class: 'halo-pt', tabindex: 0 }, svg);
+    c.addEventListener('mouseenter', () => pick(h)); c.addEventListener('click', () => pick(h)); c.addEventListener('focus', () => pick(h));
+  }
+  pick(halo.find(h => h.kind === 'fine' && h.y === 4));
+}
+
+/* ---------- loss weight bars ---------- */
+const bars = (id, rows, max) => {
+  const g = document.getElementById(id), x0 = 190, W = 250;
+  rows.forEach(([name, w, note, off], i) => {
+    const y = 14 + i * 30, len = Math.max(2, W * w / max);
+    const b = el('g', {}, g); el('title', {}, b, `${name}: weight ${note || w}`);
+    const c = off ? C.stat : C.pred;
+    el('rect', { x: x0, y, width: len, height: 20, fill: note ? '#fff' : c, stroke: c, 'stroke-width': note ? 1.5 : 0, 'stroke-dasharray': note ? '4 3' : '' }, b);
+    el('text', { x: x0 - 8, y: y + 15, 'text-anchor': 'end', fill: off ? C.muted : C.ink }, b, name);
+    el('text', { x: x0 + len + 8, y: y + 15, 'font-weight': 600, fill: off ? C.muted : C.ink }, b, note || w);
+  });
+};
+bars('wshort', [['Gas (T, U, V, W, Z, G)', 1], ['Faces', 1], ['House > 40 kW/m²', 0.5], ['Hot overlap 4 m', 0.3], ['Hot overlap 16 m', 0.3], ['Conservation', 0.1, '0 → 0.1 (flag)']], 1);
+bars('wlong', [['House dose', 0.5], ['Time > 40 kW/m²', 0.5], ['16 m fields', 0.5], ['Flux quantiles', 0.3], ['Hot overlap 16 m', 0.3], ['Conservation', 0.1, '0 → 0.1 (flag)'], ['Total heat release', 0.3, '0.3 in code → 0 now', true]], 1);
+
+/* ---------- schedule ---------- */
+{
+  const svg = document.getElementById('curfig');
+  const L = 50, R = 470, T = 20, B = 190, xmax = 230, ymax = 5;
+  const X = v => L + (R - L) * v / xmax, Y = v => B - (B - T) * v / ymax;
+  for (const v of [0, 1, 2, 3, 4, 5]) { el('line', { x1: L, x2: R, y1: Y(v), y2: Y(v), stroke: '#eef0f2' }, svg); el('text', { x: L - 8, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': 12, fill: C.muted }, svg, v); }
+  for (const v of [0, 50, 100, 150, 200]) el('text', { x: X(v), y: B + 18, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, v + 'k');
+  el('text', { x: (L + R) / 2, y: B + 36, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, 'optimizer steps (4 GPUs)');
+  el('text', { x: L - 36, y: T - 6, 'font-size': 12, fill: C.muted }, svg, 'window H');
+  el('rect', { x: X(30), y: T, width: R - X(30), height: B - T, fill: C.force, opacity: 0.08 }, svg);
+  el('text', { x: X(32), y: T + 14, 'font-size': 12, fill: '#8a4a0c' }, svg, 'pushforward on half the windows, n ≤ 20');
+  const segs = [[0, 150, 2, 'H = 2 prefix'], [150, 190, 3, 'fork A'], [190, 230, 4, 'fork A']];
+  let d = ''; segs.forEach(([a, b, k], i) => { d += (i ? `L${X(a)},${Y(k)}` : `M${X(a)},${Y(k)}`) + `L${X(b)},${Y(k)}`; });
+  el('path', { d, fill: 'none', stroke: C.pred, 'stroke-width': 2 }, svg);
+  el('text', { x: X(75), y: Y(2) - 8, 'text-anchor': 'middle', 'font-size': 12, fill: '#0b6b5e' }, svg, 'H = 2 prefix, 150k');
+  el('text', { x: X(190), y: Y(4) - 8, 'text-anchor': 'middle', 'font-size': 12, fill: '#0b6b5e' }, svg, 'fork A: H = 3, then 4');
+  el('line', { x1: X(50), x2: X(50), y1: T + 22, y2: B, stroke: C.force, 'stroke-dasharray': '3 3' }, svg);
+  el('text', { x: X(50) + 4, y: B - 8, 'font-size': 11.5, fill: '#8a4a0c' }, svg, '50k: last good checkpoint');
+  const tip = el('text', { x: L + 8, y: T + 34, 'font-size': 12, 'font-weight': 600 }, svg, '');
+  const cross = el('line', { y1: T, y2: B, stroke: C.muted, 'stroke-dasharray': '3 3', visibility: 'hidden' }, svg);
+  const hit = el('rect', { x: L, y: T, width: R - L, height: B - T, fill: 'transparent' }, svg);
+  hit.addEventListener('mousemove', e => {
+    const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse());
+    const w = (q.x - L) / (R - L) * xmax, s = segs.find(([a, b]) => w >= a && w < b) || segs[segs.length - 1];
+    cross.setAttribute('x1', q.x); cross.setAttribute('x2', q.x); cross.setAttribute('visibility', 'visible');
+    tip.textContent = `${w.toFixed(0)}k steps: H = ${s[2]}` + (w >= 30 ? ', pushforward on' : '');
+  });
+  hit.addEventListener('mouseleave', () => { cross.setAttribute('visibility', 'hidden'); tip.textContent = ''; });
+}
+
+/* ---------- conservation hinge ---------- */
+{
+  const svg = document.getElementById('hingefig'), slider = document.getElementById('tau');
+  const L = 50, R = 480, T = 20, B = 220, rmax = 0.5, ymax = 0.13;
+  const X = r => L + (R - L) * (r + rmax) / (2 * rmax), Y = v => B - (B - T) * Math.min(v, ymax) / ymax;
+  const huber = a => a < 1 ? 0.5 * a * a : a - 0.5;
+  const draw = tau => {
+    svg.innerHTML = '';
+    el('line', { x1: L, x2: R, y1: B, y2: B, stroke: C.line }, svg);
+    for (const r of [-0.5, -0.25, 0, 0.25, 0.5]) el('text', { x: X(r), y: B + 18, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, (r > 0 ? '+' : '') + r);
+    el('text', { x: (L + R) / 2, y: B + 36, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, 'relative error r of a total (pred vs FDS)');
+    el('text', { x: L, y: T - 6, 'font-size': 12, fill: C.muted }, svg, 'penalty');
+    el('rect', { x: X(-tau), y: T, width: X(tau) - X(-tau), height: B - T, fill: C.pred, opacity: 0.1 }, svg);
+    if (tau > 0) el('text', { x: X(0), y: T + 16, 'text-anchor': 'middle', 'font-size': 12, fill: '#0b6b5e' }, svg, 'dead zone: free');
+    let d = ''; for (let i = 0; i <= 200; i++) { const r = -rmax + 2 * rmax * i / 200; d += (i ? 'L' : 'M') + X(r) + ',' + Y(huber(Math.max(0, Math.abs(r) - tau))); }
+    el('path', { d, fill: 'none', stroke: C.pred, 'stroke-width': 2 }, svg);
+    document.getElementById('tauv').textContent = tau.toFixed(2);
+  };
+  slider.addEventListener('input', () => draw(+slider.value));
+  draw(+slider.value);
+}
+
+/* ---------- FER alignment ---------- */
+{
+  const svg = document.getElementById('ferfig');
+  const L = 215, R = 420, xmax = 25, X = v => L + (R - L) * v / xmax;
+  const rows = [['Before (exterior house faces,', 'no cross-block, no ground strip)', 0.4, 24, C.force], ['After (cross-block faces', '+ ground strip ≤ 2 m)', 0.0, 1.6, C.pred]];
+  rows.forEach(([a, b, lo, hi, c], i) => {
+    const y = 40 + i * 80;
+    el('text', { x: L - 10, y: y + 10, 'text-anchor': 'end', 'font-size': 12.5 }, svg, a);
+    el('text', { x: L - 10, y: y + 26, 'text-anchor': 'end', 'font-size': 12.5 }, svg, b);
+    const g = el('g', {}, svg); el('title', {}, g, `${lo}–${hi}% from production FER`);
+    el('rect', { x: X(lo), y, width: Math.max(3, X(hi) - X(lo)), height: 28, rx: 3, fill: c, opacity: 0.85 }, g);
+    el('text', { x: X(hi) + 6, y: y + 19, 'font-size': 12.5, 'font-weight': 600 }, svg, `${lo}–${hi}%`);
+  });
+  el('line', { x1: X(3), x2: X(3), y1: 26, y2: 200, stroke: C.ink, 'stroke-dasharray': '5 4' }, svg);
+  el('text', { x: X(3) + 4, y: 210, 'font-size': 12, fill: C.muted }, svg, '3% bar');
+  for (const v of [0, 5, 10, 15, 20, 25]) el('text', { x: X(v), y: 230, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, v + '%');
+  el('text', { x: (L + R) / 2, y: 246, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, 'gap to production FER, range over 9 runs');
+}
+
+/* ---------- throughput ---------- */
+{
+  const svg = document.getElementById('tputfig');
+  const L = 170, R = 440, xmax = 25, X = v => L + (R - L) * v / xmax;
+  const rows = [['Old recipe (fp32)', 17.0, 11.4, ''], ['4 slots + bf16 + Triton', 19.6, 16.2, ''], ['… + 8 loader workers', 23.9, 16, '≈16']];
+  rows.forEach(([name, a, b, bl], i) => {
+    const y = 18 + i * 66;
+    el('text', { x: L - 8, y: y + 22, 'text-anchor': 'end', 'font-size': 12.5 }, svg, name);
+    const g1 = el('g', {}, svg); el('title', {}, g1, `${name}: ${a} windows/s before pushforward`);
+    el('rect', { x: L, y, width: X(a) - L, height: 20, fill: C.der }, g1);
+    el('text', { x: X(a) + 6, y: y + 15, 'font-size': 12.5, 'font-weight': 600 }, svg, a.toFixed(1));
+    const g2 = el('g', {}, svg); el('title', {}, g2, `${name}: ${bl || b} windows/s with pushforward`);
+    el('rect', { x: L, y: y + 24, width: X(b) - L, height: 20, fill: C.pred }, g2);
+    el('text', { x: X(b) + 6, y: y + 39, 'font-size': 12.5, 'font-weight': 600 }, svg, bl || b.toFixed(1));
+  });
+  for (const v of [0, 5, 10, 15, 20, 25]) el('text', { x: X(v), y: 222, 'text-anchor': 'middle', 'font-size': 12, fill: C.muted }, svg, v);
+  el('rect', { x: L, y: 232, width: 12, height: 12, fill: C.der }, svg); el('text', { x: L + 18, y: 243, 'font-size': 12 }, svg, 'before pushforward');
+  el('rect', { x: L + 150, y: 232, width: 12, height: 12, fill: C.pred }, svg); el('text', { x: L + 168, y: 243, 'font-size': 12 }, svg, 'with pushforward');
+}
+
+/* ---------- single-GPU bench history ---------- */
+{
+  const svg = document.getElementById('benchfig');
+  const rows = [['First code', 320], ['cudnn.benchmark', 275], ['No sort-based scatter', 214], ['Fused LayerNorm+GELU', 181], ['Round 2 (CSR halo, compile)', 111], ['Round 3 (CSR pool, int32)', 99], ['Round 4 (loss outside ckpt…)', 77]];
+  const L = 200, R = 440, X = v => L + (R - L) * v / 320;
+  rows.forEach(([name, v], i) => {
+    const y = 6 + i * 29;
+    const g = el('g', {}, svg); el('title', {}, g, `${name}: ${v} ms per model step`);
+    el('rect', { x: L, y, width: X(v) - L, height: 20, fill: i === rows.length - 1 ? C.pred : C.stat }, g);
+    el('text', { x: L - 8, y: y + 15, 'text-anchor': 'end', 'font-size': 12.5 }, svg, name);
+    el('text', { x: X(v) + 6, y: y + 15, 'font-size': 12.5, 'font-weight': 600 }, svg, v);
+  });
+}
+})();
+</script>
+</body>
+</html>
